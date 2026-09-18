@@ -134,4 +134,5 @@ jobs:
             release/MemoryGame-Windows.exe \
             release/MemoryGame-macOS \
             release/MemoryGame-Linux \
+            --repo "${{ github.repository }}" \
             --clobber
