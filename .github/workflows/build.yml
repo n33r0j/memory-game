@@ -1,0 +1,84 @@
+name: Build Memory Game
+
+on:
+  release:
+    types: [created]
+
+jobs:
+
+  build-windows:
+    name: Build Windows
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install PyInstaller
+        run: pip install pyinstaller
+
+      - name: Build executable
+        run: pyinstaller --onefile --name MemoryGame memory_game.py
+
+      - name: Upload Windows executable
+        uses: actions/upload-artifact@v4
+        with:
+          name: MemoryGame-Windows
+          path: dist/MemoryGame.exe
+
+
+  build-macos:
+    name: Build macOS
+    runs-on: macos-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install PyInstaller
+        run: pip install pyinstaller
+
+      - name: Build executable
+        run: pyinstaller --onefile --name MemoryGame memory_game.py
+
+      - name: Upload macOS executable
+        uses: actions/upload-artifact@v4
+        with:
+          name: MemoryGame-macOS
+          path: dist/MemoryGame
+
+
+  build-linux:
+    name: Build Ubuntu/Linux
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install PyInstaller
+        run: pip install pyinstaller
+
+      - name: Build executable
+        run: pyinstaller --onefile --name MemoryGame memory_game.py
+
+      - name: Upload Linux executable
+        uses: actions/upload-artifact@v4
+        with:
+          name: MemoryGame-Linux
+          path: dist/MemoryGame
