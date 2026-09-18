@@ -1,76 +1,87 @@
-# Memory Game - Simple Overview
+# Memory Game
 
-## What is it?
-A fun, interactive **two-player memory matching game** where players take turns flipping cards to find matching pairs.
+A simple two-player memory game that runs directly in the terminal.
 
-## How to Play?
-1. Choose difficulty: **Easy (4×4)** or **Hard (6×6)**
-2. Players alternate flipping cards
-3. Match pairs = score points
-4. Most matches wins!
+The goal is to find matching pairs of cards and score more points than the other player.
 
-## How to Run?
-```bash
-# Navigate to project folder
-cd MEMORYGAME
+## How to Play
 
-# Start server
-python3 -m http.server 8000
+There are two players.
 
-# Open browser
-http://localhost:8000
-```
+On each turn, select two cards using their position on the board.
 
-## Game Features
-- 🎮 Two difficulty modes (8 or 18 pairs)
-- 👥 Two-player turn-based gameplay
-- 🎨 Beautiful glassmorphism UI
-- ⏱️ Real-time game timer
-- 🎉 Victory confetti animation
-- 📱 Fully responsive design
+For example:
 
-## Files Included
-| File | Purpose |
-|------|---------|
-| `index.html` | Game structure & layout |
-| `app.js` | Game logic & mechanics |
-| `styles.css` | Modern styling & animations |
-| `README.md` | This documentation |
-| Image file | Menu mascot |
+A1  
+B3
 
-## Game Rules
-- Each card has one matching pair
-- Click cards to flip and find matches
-- If match: Cards stay flipped, continue your turn
-- If no match: Cards flip back, turn switches to other player
-- 10 seconds per turn
-- First to match most pairs wins!
+If the cards match:
 
-## Technologies
-- **HTML5** - Structure
-- **CSS3** - Design & animations
-- **JavaScript** - Game logic
-- **Canvas Confetti** - Victory effects
+- The player gets 1 point.
+- The same player gets another turn.
 
-## Customization
-Want to modify the game? Edit:
-- **Card icons** → `app.js` line 14
-- **Player names** → `app.js` line 6-8
-- **Colors** → `styles.css` lines 1-18
-- **Turn time** → `app.js` line 24
+If the cards do not match:
 
-## Quick Stats
-- **Easy Mode**: 4×4 grid (16 cards, 8 pairs)
-- **Hard Mode**: 6×6 grid (36 cards, 18 pairs)
-- **Lines of Code**: ~1,000+
-- **Setup Time**: <2 minutes
+- The cards are hidden again.
+- The turn moves to the other player.
 
-## Browser Support
-✅ Chrome/Edge  
-✅ Firefox  
-✅ Safari  
-✅ Mobile browsers
+Each player has 30 seconds to complete their turn.
 
----
+The game ends when all pairs have been matched.
 
-**Ready to play?** Start the server and open `http://localhost:8000`! 🎮
+## Game Modes
+
+### Easy
+
+- 4 x 4 board
+- 8 pairs
+- 16 cards
+
+### Hard
+
+- 6 x 6 board
+- 18 pairs
+- 36 cards
+
+The cards are randomly shuffled every time a new game starts.
+
+## Controls
+
+Card positions are not case-sensitive.
+
+Both of these work:
+
+```text
+A1
+a1
+
+To exit during the game, enter:
+q
+You can also use:
+quit
+exit
+The game asks for confirmation before exiting.
+
+Run the Game
+Requirements
+Python 3 is required to run the source code directly.
+Clone the repository:
+git clone https://github.com/n33r0j/memory-game.git
+cd memory-game
+Run the game:
+python3 memory_game.py
+
+Download
+Pre-built versions for Windows, macOS, and Linux will be available in the Releases section.
+Download the version for your operating system and run the game from your terminal.
+Project Structure
+memory-game/
+├── memory_game.py
+├── README.md
+└── .github/
+    └── workflows/
+        └── build.yml
+
+License
+This project is open source and available for learning and personal use.
+
