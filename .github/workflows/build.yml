@@ -5,6 +5,9 @@ on:
     types: [created]
   workflow_dispatch:
 
+permissions:
+  contents: write
+
 jobs:
 
   build-windows:
@@ -23,10 +26,10 @@ jobs:
       - name: Install PyInstaller
         run: pip install pyinstaller
 
-      - name: Build executable
+      - name: Build Windows executable
         run: pyinstaller --onefile --name MemoryGame memory_game.py
 
-      - name: Upload Windows executable
+      - name: Upload Windows artifact
         uses: actions/upload-artifact@v4
         with:
           name: MemoryGame-Windows
@@ -49,10 +52,10 @@ jobs:
       - name: Install PyInstaller
         run: pip install pyinstaller
 
-      - name: Build executable
+      - name: Build macOS executable
         run: pyinstaller --onefile --name MemoryGame memory_game.py
 
-      - name: Upload macOS executable
+      - name: Upload macOS artifact
         uses: actions/upload-artifact@v4
         with:
           name: MemoryGame-macOS
@@ -67,7 +70,7 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Set up Python
+      - name: Install Python
         uses: actions/setup-python@v5
         with:
           python-version: "3.12"
@@ -75,11 +78,60 @@ jobs:
       - name: Install PyInstaller
         run: pip install pyinstaller
 
-      - name: Build executable
+      - name: Build Linux executable
         run: pyinstaller --onefile --name MemoryGame memory_game.py
 
-      - name: Upload Linux executable
+      - name: Upload Linux artifact
         uses: actions/upload-artifact@v4
         with:
           name: MemoryGame-Linux
           path: dist/MemoryGame
+
+
+  release:
+    name: Attach Downloads to Release
+    runs-on: ubuntu-latest
+    needs:
+      - build-windows
+      - build-macos
+      - build-linux
+
+    steps:
+      - name: Download Windows artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: MemoryGame-Windows
+          path: windows
+
+      - name: Download macOS artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: MemoryGame-macOS
+          path: macos
+
+      - name: Download Linux artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: MemoryGame-Linux
+          path: linux
+
+      - name: Prepare release files
+        run: |
+          mkdir release
+
+          cp windows/MemoryGame.exe release/MemoryGame-Windows.exe
+          cp macos/MemoryGame release/MemoryGame-macOS
+          cp linux/MemoryGame release/MemoryGame-Linux
+
+          chmod +x release/MemoryGame-macOS
+          chmod +x release/MemoryGame-Linux
+
+      - name: Upload files to GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release upload "${{ github.event.release.tag_name }}" \
+            release/MemoryGame-Windows.exe \
+            release/MemoryGame-macOS \
+            release/MemoryGame-Linux \
+            --clobber
