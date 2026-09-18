@@ -70,7 +70,7 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Install Python
+      - name: Set up Python
         uses: actions/setup-python@v5
         with:
           python-version: "3.12"
@@ -91,12 +91,21 @@ jobs:
   release:
     name: Attach Downloads to Release
     runs-on: ubuntu-latest
+
+    # Only run this job when a GitHub Release is created.
+    # It will not run during manual workflow testing.
+    if: github.event_name == 'release'
+
     needs:
       - build-windows
       - build-macos
       - build-linux
 
     steps:
+
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
       - name: Download Windows artifact
         uses: actions/download-artifact@v4
         with:
