@@ -1,8 +1,15 @@
-import random
-import time
 import os
-import sys
+import random
 import select
+import sys
+import time
+
+# Windows / macOS / Linux terminal input
+if os.name == "nt":
+    import msvcrt
+else:
+    import termios
+    import tty
 
 
 ICONS = [
@@ -19,30 +26,163 @@ PLAYERS = [
 ]
 
 
+# ============================================================
+# TERMINAL CONTROL
+# ============================================================
+
 def clear_screen():
-    os.system("clear")
+    """Clear the terminal and move cursor to the top-left."""
+    print("\033[2J\033[H", end="", flush=True)
 
 
-def print_header(title):
-    print("\n" + "=" * 50)
-    print(f"{title:^50}")
-    print("=" * 50)
+def move_cursor_home():
+    """Move cursor to the top-left without clearing."""
+    print("\033[H", end="", flush=True)
 
+
+def hide_cursor():
+    print("\033[?25l", end="", flush=True)
+
+
+def show_cursor():
+    print("\033[?25h", end="", flush=True)
+
+
+def clear_current_line():
+    print("\033[2K", end="", flush=True)
+
+
+# ============================================================
+# INPUT HANDLING
+# ============================================================
+
+class TerminalInput:
+    """
+    Cross-platform single-key input.
+
+    Windows:
+        Uses msvcrt.
+
+    macOS/Linux:
+        Uses termios + select.
+    """
+
+    def __init__(self):
+        self.old_settings = None
+
+    def start(self):
+        if os.name != "nt":
+            fd = sys.stdin.fileno()
+            self.old_settings = termios.tcgetattr(fd)
+            tty.setcbreak(fd)
+
+    def stop(self):
+        if os.name != "nt" and self.old_settings is not None:
+            fd = sys.stdin.fileno()
+            termios.tcsetattr(
+                fd,
+                termios.TCSADRAIN,
+                self.old_settings
+            )
+            self.old_settings = None
+
+    def key_available(self):
+        if os.name == "nt":
+            return msvcrt.kbhit()
+
+        ready, _, _ = select.select(
+            [sys.stdin],
+            [],
+            [],
+            0
+        )
+
+        return bool(ready)
+
+    def get_key(self):
+        if os.name == "nt":
+
+            if not msvcrt.kbhit():
+                return None
+
+            key = msvcrt.getwch()
+
+            # Handle special Windows keys
+            if key in ("\x00", "\xe0"):
+                msvcrt.getwch()
+                return None
+
+            return key
+
+        if not self.key_available():
+            return None
+
+        return sys.stdin.read(1)
+
+
+terminal_input = TerminalInput()
+
+
+# ============================================================
+# EXIT CONFIRMATION
+# ============================================================
+
+def confirm_exit():
+    """
+    Ask for exit confirmation.
+
+    Returns True if the user wants to exit.
+    """
+
+    terminal_input.stop()
+    show_cursor()
+
+    print()
+    print("Are you sure you want to exit?")
+    print("All current progress will be lost.")
+    print()
+
+    while True:
+
+        choice = input("Exit? (y/n): ").strip().lower()
+
+        if choice in ("y", "yes"):
+            clear_screen()
+            print("Goodbye.")
+            return True
+
+        if choice in ("n", "no"):
+            hide_cursor()
+            terminal_input.start()
+            return False
+
+        print("Please enter y or n.")
+
+
+# ============================================================
+# GAME SETUP
+# ============================================================
 
 def choose_mode():
 
     while True:
 
         clear_screen()
+        show_cursor()
 
-        print_header("MEMORY GAME")
+        print("=" * 50)
+        print(f"{'MEMORY GAME':^50}")
+        print("=" * 50)
+        print()
 
-        print("\nSelect difficulty:\n")
+        print("Select difficulty:")
+        print()
         print("1. Easy  - 4 x 4")
         print("2. Hard  - 6 x 6")
         print("3. Exit")
+        print()
 
-        choice = input("\nEnter your choice: ").strip()
+        choice = input("Enter your choice: ").strip()
 
         if choice == "1":
             return "easy"
@@ -51,10 +191,12 @@ def choose_mode():
             return "hard"
 
         if choice == "3":
-            print("\nGoodbye.")
+            clear_screen()
+            print("Goodbye.")
             sys.exit()
 
-        print("\nInvalid choice.")
+        print()
+        print("Invalid choice.")
         time.sleep(1)
 
 
@@ -82,15 +224,19 @@ def get_board_size(cards):
     return 6
 
 
+# ============================================================
+# BOARD
+# ============================================================
+
 def format_card(value, revealed, matched):
 
     if matched:
-        return "[   ]"
+        return "     "
 
     if revealed:
-        return f"[ {value} ]"
+        return f" {value} "
 
-    return "[ ? ]"
+    return "  ?  "
 
 
 def display_board(cards, revealed, matched):
@@ -99,37 +245,49 @@ def display_board(cards, revealed, matched):
 
     print()
 
-    print("       ", end="")
+    # Column numbers
+    header = "       "
 
     for column in range(size):
-        print(f"{column + 1:^7}", end="")
+        header += f"{column + 1:^8}"
 
-    print()
+    print("\033[2K" + header)
 
-    print("      " + "-" * (size * 7))
+    separator = "      " + "-" * (size * 8)
+
+    print("\033[2K" + separator)
 
     for row in range(size):
 
-        print(f"  {chr(65 + row)}   ", end="")
+        row_text = f"  {chr(65 + row)}   "
 
         for column in range(size):
 
             index = row * size + column
 
-            card = format_card(
-                cards[index],
-                revealed[index],
-                matched[index]
-            )
+            if matched[index]:
+                card = "       "
 
-            print(f"{card:^7}", end="")
+            elif revealed[index]:
+                card = f" {cards[index]} "
 
-        print()
+            else:
+                card = "   ?   "
 
-        print("      " + "-" * (size * 7))
+            row_text += f"|{card:^7}"
+
+        row_text += "|"
+
+        # Clear the entire terminal line before drawing it.
+        print("\033[2K" + row_text)
+
+        print("\033[2K" + separator)
 
     print()
 
+# ============================================================
+# COORDINATE HANDLING
+# ============================================================
 
 def coordinate_to_index(coordinate, size):
 
@@ -148,6 +306,7 @@ def coordinate_to_index(coordinate, size):
         return None
 
     row = ord(row_char) - ord("A")
+
     column = int(column_text) - 1
 
     if row < 0 or row >= size:
@@ -159,51 +318,36 @@ def coordinate_to_index(coordinate, size):
     return row * size + column
 
 
-def confirm_exit():
+# ============================================================
+# RENDERING
+# ============================================================
 
-    print("\nAre you sure you want to exit?")
-    print("All current progress will be lost.")
+def render_game(
+    cards,
+    revealed,
+    matched,
+    current_player,
+    mode,
+    remaining,
+    message="",
+    input_buffer="",
+    prompt=""
+):
 
-    while True:
+    move_cursor_home()
 
-        confirmation = input(
-            "Exit? (y/n): "
-        ).strip().lower()
+    # Header
+    print("=" * 50)
 
-        if confirmation in ("y", "yes"):
-            print("\nExiting game.")
-            time.sleep(1)
-            sys.exit()
+    size = get_board_size(cards)
 
-        if confirmation in ("n", "no"):
-            print("\nContinuing game.")
-            time.sleep(1)
-            return
-
-        print("Please enter y or n.")
-
-
-def get_input_with_timer(prompt, timeout):
-
-    print(prompt, end="", flush=True)
-
-    ready, _, _ = select.select(
-        [sys.stdin],
-        [],
-        [],
-        timeout
+    print(
+        f"{f'MEMORY GAME - {mode.upper()} {size} x {size}':^50}"
     )
-
-    if ready:
-        return sys.stdin.readline().strip()
-
-    return None
-
-
-def display_scoreboard(current_player, timer=None):
 
     print("=" * 50)
 
+    # Score
     print(
         f"Player 1: {PLAYERS[0]['score']}    "
         f"Player 2: {PLAYERS[1]['score']}"
@@ -213,360 +357,483 @@ def display_scoreboard(current_player, timer=None):
         f"Turn: {PLAYERS[current_player]['name']}"
     )
 
-    if timer is not None:
-        print(f"Time remaining: {timer} seconds")
+    print(
+        f"Time remaining: {remaining:02d} seconds"
+    )
 
     print("=" * 50)
 
+    # Board
+    display_board(
+        cards,
+        revealed,
+        matched
+    )
 
-def timed_card_selection(
+    # Always print a fixed-width message line.
+    # This prevents old messages from remaining.
+    message_line = message[:48]
+
+    print(f"{message_line:<48}")
+
+    # Input line
+    input_line = prompt + input_buffer
+
+    print(f"{input_line:<48}", end="", flush=True)
+
+    # Clear everything below the current screen.
+    print("\033[J", end="", flush=True)
+
+
+# ============================================================
+# INPUT BUFFER
+# ============================================================
+
+def get_coordinate_input(
     cards,
     revealed,
     matched,
     current_player,
-    timeout,
-    message
+    mode,
+    deadline,
+    prompt
 ):
 
     size = get_board_size(cards)
 
-    start_time = time.time()
+    input_buffer = ""
+
+    message = ""
 
     while True:
 
-        elapsed = time.time() - start_time
-        remaining = max(0, int(timeout - elapsed))
+        remaining = max(
+            0,
+            int(deadline - time.time())
+        )
 
         if remaining <= 0:
             return None
 
-        clear_screen()
-
-        display_scoreboard(
-            current_player,
-            remaining
-        )
-
-        display_board(
+        render_game(
             cards,
             revealed,
-            matched
-        )
-
-        choice = get_input_with_timer(
+            matched,
+            current_player,
+            mode,
+            remaining,
             message,
-            remaining
+            input_buffer,
+            prompt
         )
 
-        if choice is None:
-            return None
+        message = ""
 
-        choice = choice.strip()
+        key = terminal_input.get_key()
 
-        if choice.lower() in ("q", "quit", "exit"):
+        if key is None:
 
-            confirm_exit()
+            # Small delay prevents excessive CPU usage
+            time.sleep(0.03)
 
             continue
 
-        index = coordinate_to_index(
-            choice,
-            size
+        # Enter
+        if key in ("\r", "\n"):
+
+            choice = input_buffer.strip()
+
+            if not choice:
+                message = "Enter a card position."
+                continue
+
+            # Exit commands
+            if choice.lower() in (
+                "q",
+                "quit",
+                "exit"
+            ):
+
+                if confirm_exit():
+                    sys.exit()
+
+                input_buffer = ""
+                continue
+
+            index = coordinate_to_index(
+                choice,
+                size
+            )
+
+            if index is None:
+
+                message = "Invalid position."
+
+                input_buffer = ""
+
+                continue
+
+            if matched[index]:
+
+                message = "That card has already been matched."
+
+                input_buffer = ""
+
+                continue
+
+            if revealed[index]:
+
+                message = "That card is already selected."
+
+                input_buffer = ""
+
+                continue
+
+            return index
+
+        # Backspace
+        elif key in ("\x08", "\x7f"):
+
+            input_buffer = input_buffer[:-1]
+
+        # Ctrl+C
+        elif key == "\x03":
+
+            if confirm_exit():
+                sys.exit()
+
+            input_buffer = ""
+
+        # Normal character
+        elif key.isprintable():
+
+            input_buffer += key
+
+
+# ============================================================
+# SHOW TEMPORARY MESSAGE
+# ============================================================
+
+def show_message(
+    cards,
+    revealed,
+    matched,
+    current_player,
+    mode,
+    message,
+    seconds=2
+):
+
+    end_time = time.time() + seconds
+
+    while time.time() < end_time:
+
+        render_game(
+            cards,
+            revealed,
+            matched,
+            current_player,
+            mode,
+            max(
+                0,
+                int(end_time - time.time())
+            ),
+            message
         )
 
-        if index is None:
-
-            print("\nInvalid position.")
-            time.sleep(1)
-
-            continue
-
-        if matched[index]:
-
-            print("\nThat card has already been matched.")
-            time.sleep(1)
-
-            continue
-
-        if revealed[index]:
-
-            print("\nThat card is already selected.")
-            time.sleep(1)
-
-            continue
-
-        return index
+        time.sleep(0.05)
 
 
-def hard_mode_first_card_warning():
-
-    print("\nRemember this card.")
-    time.sleep(1)
-
-
-def end_game():
-
-    clear_screen()
-
-    print_header("GAME OVER")
-
-    player1_score = PLAYERS[0]["score"]
-    player2_score = PLAYERS[1]["score"]
-
-    print()
-    print(f"Player 1: {player1_score}")
-    print(f"Player 2: {player2_score}")
-    print()
-
-    if player1_score > player2_score:
-
-        print("Player 1 wins.")
-
-    elif player2_score > player1_score:
-
-        print("Player 2 wins.")
-
-    else:
-
-        print("The game is a tie.")
-
-    print()
-
+# ============================================================
+# PLAY GAME
+# ============================================================
 
 def play_game(mode):
 
+    # Reset scores
     for player in PLAYERS:
         player["score"] = 0
 
     cards = create_board(mode)
 
-    size = get_board_size(cards)
-
     revealed = [False] * len(cards)
+
     matched = [False] * len(cards)
 
     current_player = 0
 
     matched_pairs = 0
+
     total_pairs = len(cards) // 2
 
-    while matched_pairs < total_pairs:
+    clear_screen()
+    hide_cursor()
+
+    terminal_input.start()
+
+    try:
+
+        while matched_pairs < total_pairs:
+
+            # ------------------------------------------------
+            # START TURN
+            # ------------------------------------------------
+
+            turn_deadline = time.time() + TURN_TIME
+
+            # ------------------------------------------------
+            # FIRST CARD
+            # ------------------------------------------------
+
+            first_index = get_coordinate_input(
+                cards,
+                revealed,
+                matched,
+                current_player,
+                mode,
+                turn_deadline,
+                "\nChoose first card: "
+            )
+
+            if first_index is None:
+
+                show_message(
+                    cards,
+                    revealed,
+                    matched,
+                    current_player,
+                    mode,
+                    "Time is up."
+                )
+
+                current_player = 1 - current_player
+
+                continue
+
+            revealed[first_index] = True
+
+            # ------------------------------------------------
+            # CHECK TIME
+            # ------------------------------------------------
+
+            if time.time() >= turn_deadline:
+
+                revealed[first_index] = False
+
+                show_message(
+                    cards,
+                    revealed,
+                    matched,
+                    current_player,
+                    mode,
+                    "Time is up."
+                )
+
+                current_player = 1 - current_player
+
+                continue
+
+            # ------------------------------------------------
+            # SECOND CARD
+            # ------------------------------------------------
+
+            second_index = get_coordinate_input(
+                cards,
+                revealed,
+                matched,
+                current_player,
+                mode,
+                turn_deadline,
+                "\nChoose second card: "
+            )
+
+            if second_index is None:
+
+                revealed[first_index] = False
+
+                show_message(
+                    cards,
+                    revealed,
+                    matched,
+                    current_player,
+                    mode,
+                    "Time is up."
+                )
+
+                current_player = 1 - current_player
+
+                continue
+
+            revealed[second_index] = True
+
+            # ------------------------------------------------
+            # SHOW BOTH CARDS
+            # ------------------------------------------------
+
+            render_game(
+                cards,
+                revealed,
+                matched,
+                current_player,
+                mode,
+                max(
+                    0,
+                    int(turn_deadline - time.time())
+                ),
+                f"\nSelected: {cards[first_index]} "
+                f"and {cards[second_index]}"
+            )
+
+            time.sleep(1)
+
+            # ------------------------------------------------
+            # MATCH
+            # ------------------------------------------------
+
+            if cards[first_index] == cards[second_index]:
+
+                matched[first_index] = True
+
+                matched[second_index] = True
+
+                revealed[first_index] = False
+
+                revealed[second_index] = False
+
+                PLAYERS[current_player]["score"] += 1
+
+                matched_pairs += 1
+
+                if matched_pairs == total_pairs:
+                    break
+
+                show_message(
+                    cards,
+                    revealed,
+                    matched,
+                    current_player,
+                    mode,
+                    "Match. You get 1 point. Same player continues."
+                )
+
+            # ------------------------------------------------
+            # NO MATCH
+            # ------------------------------------------------
+
+            else:
+
+                revealed[first_index] = False
+
+                revealed[second_index] = False
+
+                next_player = 1 - current_player
+
+                show_message(
+                    cards,
+                    revealed,
+                    matched,
+                    current_player,
+                    mode,
+                    "No match. Turn changes."
+                )
+
+                current_player = next_player
+
+        # ----------------------------------------------------
+        # GAME OVER
+        # ----------------------------------------------------
+
+        show_cursor()
 
         clear_screen()
 
-        print_header(
-            f"MEMORY GAME - {mode.upper()} {size} x {size}"
+        print("=" * 50)
+        print(f"{'GAME OVER':^50}")
+        print("=" * 50)
+
+        print()
+
+        print(
+            f"Player 1: {PLAYERS[0]['score']}"
         )
 
         print(
-            f"\nPlayer 1: {PLAYERS[0]['score']}    "
             f"Player 2: {PLAYERS[1]['score']}"
         )
 
-        print(
-            f"Turn: {PLAYERS[current_player]['name']}"
-        )
+        print()
 
-        turn_start = time.time()
+        if PLAYERS[0]["score"] > PLAYERS[1]["score"]:
 
-        remaining_time = TURN_TIME - (
-            time.time() - turn_start
-        )
+            print("Player 1 wins.")
 
-        first_index = timed_card_selection(
-            cards,
-            revealed,
-            matched,
-            current_player,
-            remaining_time,
-            "\nChoose first card: "
-        )
+        elif PLAYERS[1]["score"] > PLAYERS[0]["score"]:
 
-        if first_index is None:
-
-            clear_screen()
-
-            print_header("TIME UP")
-
-            print(
-                f"\n{PLAYERS[current_player]['name']} "
-                "ran out of time."
-            )
-
-            current_player = 1 - current_player
-
-            time.sleep(1.5)
-
-            continue
-
-        revealed[first_index] = True
-
-        clear_screen()
-
-        print_header(
-            f"MEMORY GAME - {mode.upper()} {size} x {size}"
-        )
-
-        print(
-            f"\nPlayer 1: {PLAYERS[0]['score']}    "
-            f"Player 2: {PLAYERS[1]['score']}"
-        )
-
-        print(
-            f"Turn: {PLAYERS[current_player]['name']}"
-        )
-
-        display_board(
-            cards,
-            revealed,
-            matched
-        )
-
-        print(
-            f"\nFirst card: {cards[first_index]}"
-        )
-
-        if mode == "hard":
-
-            hard_mode_first_card_warning()
-
-        elapsed = time.time() - turn_start
-
-        remaining_time = TURN_TIME - elapsed
-
-        if remaining_time <= 0:
-
-            revealed[first_index] = False
-
-            print("\nTime up.")
-
-            current_player = 1 - current_player
-
-            time.sleep(1.5)
-
-            continue
-
-        second_index = timed_card_selection(
-            cards,
-            revealed,
-            matched,
-            current_player,
-            remaining_time,
-            "\nChoose second card: "
-        )
-
-        if second_index is None:
-
-            revealed[first_index] = False
-
-            clear_screen()
-
-            print_header("TIME UP")
-
-            print(
-                f"\n{PLAYERS[current_player]['name']} "
-                "ran out of time."
-            )
-
-            current_player = 1 - current_player
-
-            time.sleep(1.5)
-
-            continue
-
-        revealed[second_index] = True
-
-        clear_screen()
-
-        print_header(
-            f"MEMORY GAME - {mode.upper()} {size} x {size}"
-        )
-
-        display_scoreboard(current_player)
-
-        display_board(
-            cards,
-            revealed,
-            matched
-        )
-
-        first_card = cards[first_index]
-        second_card = cards[second_index]
-
-        print(
-            f"\nSelected: {first_card} and {second_card}"
-        )
-
-        if first_card == second_card:
-
-            print("\nMatch.")
-
-            matched[first_index] = True
-            matched[second_index] = True
-
-            revealed[first_index] = False
-            revealed[second_index] = False
-
-            PLAYERS[current_player]["score"] += 1
-
-            matched_pairs += 1
-
-            print(
-                f"{PLAYERS[current_player]['name']} "
-                "gets 1 point."
-            )
-
-            print("Same player continues.")
-
-            time.sleep(1.5)
+            print("Player 2 wins.")
 
         else:
 
-            print("\nNo match.")
+            print("The game is a tie.")
 
-            time.sleep(1.5)
+        print()
 
-            revealed[first_index] = False
-            revealed[second_index] = False
+        terminal_input.stop()
 
-            current_player = 1 - current_player
+        while True:
 
-            print(
-                f"\nTurn changes to "
-                f"{PLAYERS[current_player]['name']}."
-            )
+            choice = input(
+                "Play again? (y/n): "
+            ).strip().lower()
 
-            time.sleep(1.5)
+            if choice in ("y", "yes"):
 
-    end_game()
+                hide_cursor()
 
-    while True:
+                terminal_input.start()
 
-        choice = input(
-            "Play again? (y/n): "
-        ).strip().lower()
+                return True
 
-        if choice in ("y", "yes"):
-            return True
+            if choice in ("n", "no"):
 
-        if choice in ("n", "no"):
+                return False
 
-            print("\nThanks for playing.")
-            return False
+            print("Please enter y or n.")
 
-        print("Please enter y or n.")
+    finally:
 
+        terminal_input.stop()
+        show_cursor()
+
+
+# ============================================================
+# MAIN
+# ============================================================
 
 def main():
 
-    while True:
+    try:
 
-        mode = choose_mode()
+        while True:
 
-        play_again = play_game(mode)
+            mode = choose_mode()
 
-        if not play_again:
-            break
+            play_again = play_game(mode)
+
+            if not play_again:
+                break
+
+    except KeyboardInterrupt:
+
+        terminal_input.stop()
+        show_cursor()
+        clear_screen()
+
+        print("Game exited.")
+
+    finally:
+
+        terminal_input.stop()
+        show_cursor()
 
 
 if __name__ == "__main__":
